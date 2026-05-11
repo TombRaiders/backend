@@ -1,0 +1,205 @@
+plugins {
+    id 'java'
+    id 'jacoco'
+    id 'checkstyle'
+    id "org.sonarqube" version "7.2.0.6526"
+    id 'org.springframework.boot' version '3.5.8'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+description = 'backend'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.3'
+    implementation 'org.apache.commons:commons-lang3:3.18.0'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
+
+    runtimeOnly 'org.postgresql:postgresql'
+
+//  임시 local 에서 돌리기 위한 의존성
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    runtimeOnly 'com.h2database:h2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+
+    implementation 'org.mindrot:jbcrypt:0.4'
+
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+    implementation platform('software.amazon.awssdk:bom:2.21.1')
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:ses'
+    implementation 'software.amazon.awssdk:cloudfront'
+
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:5.10.0'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-redis-spring:5.10.0'
+    testImplementation 'net.javacrumbs.shedlock:shedlock-provider-inmemory:5.10.0'
+}
+
+
+def excludesCoverage = [
+        '**/*annotation/*',
+        '**/*Application*',
+        '**/errorcode/**',
+        '**/*Config.java',
+]
+
+bootJar {
+    mainClass = 'com.example.backend.BackendApplication'
+    manifest {
+        attributes 'Main-Class': 'org.springframework.boot.loader.launch.PropertiesLauncher'
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+
+    doFirst {
+        println "[test] start"
+    }
+    doLast {
+        println "[test] complete"
+    }
+}
+
+jacocoTestReport {
+    dependsOn test
+
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: excludesCoverage)
+        }))
+    }
+
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+tasks.named('check') {
+    dependsOn jacocoTestCoverageVerification
+
+    doFirst {
+        println "[check] start"
+    }
+    doLast {
+        println "[check] complete"
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn jacocoTestReport
+
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: excludesCoverage)
+        }))
+    }
+
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value   = 'COVEREDRATIO'
+                minimum = 0.60
+            }
+
+            limit {
+                counter = 'BRANCH'
+                value   = 'COVEREDRATIO'
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+tasks.withType(Checkstyle).configureEach {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+checkstyle {
+    toolVersion = '8.45.1'
+
+    configFile = rootProject.file('./codestyle/naver-checkstyle-rules.xml')
+    configProperties = [
+            'suppressionFile': rootProject.file('./codestyle/naver-checkstyle-suppressions.xml')
+    ]
+
+    maxWarnings = 0  // 경고 1개라도 나오면 실패
+}
+
+jar {
+    enabled = false
+}
+
+tasks.named('sonar') {
+    dependsOn check
+
+    doFirst {
+        println "[sonar] start"
+    }
+    doLast {
+        println "[sonar] complete"
+    }
+}
+
+sonar {
+    properties {
+        property "sonar.projectKey", "Tomb-Raiders_Tomb-Raiders-backend"
+        property "sonar.projectName", "Tomb-Raiders-backend"
+        property "sonar.host.url", "https://sonarcloud.io"
+        property "sonar.organization", "tomb-raiders"
+        property "sonar.sourceEncoding", "UTF-8"
+
+        property "sonar.exclusions", ".github/**"
+
+        property "sonar.coverage.exclusions", "**/*Config.java"
+
+        property "sonar.junit.reportPaths", "build/test-results/test"
+        property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
+        property "sonar.java.checkstyle.reportPaths", "build/reports/checkstyle/main.xml, build/reports/checkstyle/test.xml"
+    }
+}
